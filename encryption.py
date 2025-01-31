@@ -221,3 +221,55 @@ class Encryption:
     def create(cls) -> "Encryption":
         """Factory method for creating Encryption instances"""
         return cls()
+
+    @staticmethod
+    def generate_key_pair() -> Dict[str, str]:
+        """
+        Generate a new X25519 key pair for encryption/decryption
+
+        Returns:
+            Dictionary containing base64-encoded 'privateKey' and 'publicKey'
+
+        Raises:
+            EncryptionError: If key generation fails
+        """
+        try:
+            # Generate new private key
+            private_key = nacl.public.PrivateKey.generate()
+
+            # Get corresponding public key
+            public_key = private_key.public_key
+
+            return {
+                "privateKey": base64.b64encode(bytes(private_key)).decode("utf-8"),
+                "publicKey": base64.b64encode(bytes(public_key)).decode("utf-8"),
+            }
+        except Exception as e:
+            raise EncryptionError(f"Key generation failed: {str(e)}")
+
+    @staticmethod
+    def get_public_key(private_key: str) -> str:
+        """
+        Derive the public key from a private key
+
+        Args:
+            private_key: Base64 encoded private key
+
+        Returns:
+            Base64 encoded public key
+
+        Raises:
+            InvalidKeyError: If private key is invalid
+            EncryptionError: If public key derivation fails
+        """
+        try:
+            # Decode and validate private key
+            priv_key_bytes = base64.b64decode(private_key)
+            private_key_obj = nacl.public.PrivateKey(priv_key_bytes)
+
+            # Get corresponding public key
+            public_key = private_key_obj.public_key
+
+            return base64.b64encode(bytes(public_key)).decode("utf-8")
+        except Exception as e:
+            raise InvalidKeyError(f"Invalid private key: {str(e)}")
