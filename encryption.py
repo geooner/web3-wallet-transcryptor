@@ -273,3 +273,79 @@ class Encryption:
             return base64.b64encode(bytes(public_key)).decode("utf-8")
         except Exception as e:
             raise InvalidKeyError(f"Invalid private key: {str(e)}")
+
+    @staticmethod
+    def validate_encrypted_message_format(encrypted_data: Dict[str, str]) -> None:
+        """
+        Validate the format of an encrypted message dictionary
+
+        Args:
+            encrypted_data: Dictionary containing encrypted message data
+
+        Raises:
+            InvalidMessageError: If the format is invalid
+        """
+        required_fields = {"version", "nonce", "ephemPublicKey", "ciphertext"}
+
+        if not isinstance(encrypted_data, dict):
+            raise InvalidMessageError("Encrypted data must be a dictionary")
+
+        if missing := required_fields - set(encrypted_data.keys()):
+            raise InvalidMessageError(f"Missing required fields: {', '.join(missing)}")
+
+        for field in required_fields:
+            if not isinstance(encrypted_data[field], str):
+                raise InvalidMessageError(f"Field '{field}' must be a string")
+            if not encrypted_data[field]:
+                raise InvalidMessageError(f"Field '{field}' cannot be empty")
+
+    @staticmethod
+    def is_valid_key(key: str, key_type: str = "public") -> bool:
+        """
+        Check if a key string is valid without raising exceptions
+
+        Args:
+            key: Base64 encoded key to validate
+            key_type: Type of key to validate ("public" or "private")
+
+        Returns:
+            bool: True if key is valid, False otherwise
+        """
+        try:
+            decoded_key = base64.b64decode(key)
+            if key_type == "public":
+                return len(decoded_key) == nacl.public.PublicKey.SIZE
+            else:  # private key
+                nacl.public.PrivateKey(decoded_key)
+                return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def format_key(key: Union[str, bytes], input_encoding: str = "raw") -> str:
+        """
+        Convert a key from various formats to base64 encoded string
+
+        Args:
+            key: Key to format (can be bytes or base64/hex string)
+            input_encoding: Format of input key ("raw", "base64", or "hex")
+
+        Returns:
+            Base64 encoded key string
+
+        Raises:
+            InvalidKeyError: If key format is invalid
+        """
+        try:
+            if input_encoding == "raw" and isinstance(key, bytes):
+                return base64.b64encode(key).decode("utf-8")
+            elif input_encoding == "base64" and isinstance(key, str):
+                # Validate it's actually base64
+                base64.b64decode(key)
+                return key
+            elif input_encoding == "hex" and isinstance(key, str):
+                return base64.b64encode(bytes.fromhex(key)).decode("utf-8")
+            else:
+                raise InvalidKeyError("Invalid key format or encoding specified")
+        except Exception as e:
+            raise InvalidKeyError(f"Failed to format key: {str(e)}")
