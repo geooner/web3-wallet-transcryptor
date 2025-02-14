@@ -349,3 +349,157 @@ class Encryption:
                 raise InvalidKeyError("Invalid key format or encoding specified")
         except Exception as e:
             raise InvalidKeyError(f"Failed to format key: {str(e)}")
+
+    @staticmethod
+    def encrypt_file(
+        receiver_public_key: str, file_path: str, chunk_size: int = 64 * 1024
+    ) -> Dict[str, str]:
+        """
+        Encrypt a file using X25519-XSalsa20-Poly1305
+
+        Args:
+            receiver_public_key: Base64 encoded public key of the receiver
+            file_path: Path to the file to encrypt
+            chunk_size: Size of chunks to read file in bytes
+
+        Returns:
+            Dict containing encrypted file data
+
+        Raises:
+            EncryptionError: If encryption fails
+            InvalidKeyError: If public key is invalid
+            FileNotFoundError: If file doesn't exist
+        """
+        try:
+            with open(file_path, "rb") as f:
+                file_content = f.read()
+
+            if len(file_content) > Encryption.MAX_MESSAGE_LENGTH:
+                raise InvalidMessageError(
+                    f"File exceeds maximum size of {Encryption.MAX_MESSAGE_LENGTH} bytes"
+                )
+
+            # Convert bytes to base64 string for encryption
+            content_str = base64.b64encode(file_content).decode("utf-8")
+
+            # Use existing message encryption
+            return Encryption.create().encrypt_message(receiver_public_key, content_str)
+
+        except FileNotFoundError:
+            raise
+        except Exception as e:
+            raise EncryptionError(f"File encryption failed: {str(e)}")
+
+    @staticmethod
+    def decrypt_file(private_key: str, encrypted_data: Dict[str, str]) -> bytes:
+        """
+        Decrypt an encrypted file
+
+        Args:
+            private_key: Base64 encoded private key of the receiver
+            encrypted_data: Dictionary containing the encrypted file data
+
+        Returns:
+            Decrypted file content as bytes
+
+        Raises:
+            EncryptionError: If decryption fails
+            InvalidKeyError: If private key is invalid
+        """
+        try:
+            # Decrypt the base64 string
+            decrypted_str = Encryption.create().decrypt_message(
+                private_key, encrypted_data
+            )
+
+            # Convert back to bytes
+            return base64.b64decode(decrypted_str)
+
+        except Exception as e:
+            raise EncryptionError(f"File decryption failed: {str(e)}")
+
+    @staticmethod
+    def verify_key_pair(private_key: str, public_key: str) -> bool:
+        """
+        Verify that a private key and public key form a valid key pair
+
+        Args:
+            private_key: Base64 encoded private key
+            public_key: Base64 encoded public key
+
+        Returns:
+            bool: True if keys form a valid pair, False otherwise
+        """
+        try:
+            derived_public = Encryption.get_public_key(private_key)
+            return derived_public == public_key
+        except Exception:
+            return False
+
+    def encrypt_with_password(self, password: str, msg: str) -> Dict[str, str]:
+        """
+        Encrypt a message using a password instead of public key
+
+        Args:
+            password: Password to encrypt with
+            msg: Message to encrypt
+
+        Returns:
+            Dict containing encrypted message data
+
+        Raises:
+            EncryptionError: If encryption fails
+            InvalidMessageError: If message is invalid
+        """
+        try:
+            # Generate a deterministic key pair from the password
+            import hashlib
+
+            password_bytes = password.encode("utf-8")
+            key_seed = hashlib.sha256(password_bytes).digest()
+
+            # Use the hash as a seed for key generation
+            private_key = nacl.public.PrivateKey(key_seed)
+            public_key = private_key.public_key
+
+            # Convert to base64 for our standard format
+            pub_key_b64 = base64.b64encode(bytes(public_key)).decode("utf-8")
+
+            # Use standard encryption with derived key
+            return self.encrypt_message(pub_key_b64, msg)
+
+        except Exception as e:
+            raise EncryptionError(f"Password-based encryption failed: {str(e)}")
+
+    def decrypt_with_password(
+        self, password: str, encrypted_data: Dict[str, str]
+    ) -> str:
+        """
+        Decrypt a message using a password instead of private key
+
+        Args:
+            password: Password to decrypt with
+            encrypted_data: Dictionary containing encrypted message data
+
+        Returns:
+            Decrypted message as string
+
+        Raises:
+            EncryptionError: If decryption fails
+        """
+        try:
+            # Generate the same deterministic key pair from password
+            import hashlib
+
+            password_bytes = password.encode("utf-8")
+            key_seed = hashlib.sha256(password_bytes).digest()
+
+            # Derive private key
+            private_key = nacl.public.PrivateKey(key_seed)
+            priv_key_b64 = base64.b64encode(bytes(private_key)).decode("utf-8")
+
+            # Use standard decryption with derived key
+            return self.decrypt_message(priv_key_b64, encrypted_data)
+
+        except Exception as e:
+            raise EncryptionError(f"Password-based decryption failed: {str(e)}")
